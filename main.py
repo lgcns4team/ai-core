@@ -10,6 +10,8 @@ ssl._create_default_https_context = ssl._create_unverified_context
 # 서비스 import
 from services.detect import DepthFaceAnalyzer
 from services.voice import VoiceOrderService
+from services.gesture import HandGestureService
+
 
 # 라우터 import
 import routers.detect as detect_router
@@ -35,6 +37,8 @@ app.add_middleware(
 # 글로벌 서비스 인스턴스
 face_analyzer = DepthFaceAnalyzer()
 voice_service = VoiceOrderService()
+gesture_service = None  # 시작 시 초기화
+
 
 # 라우터에 서비스 주입
 detect_router.set_analyzer(face_analyzer)
@@ -71,9 +75,9 @@ async def root():
             },
             "gesture_control": {
                 "description": "손 제스처 기반 비접촉 터치",
+                "status": "auto_start",
+                "note": "서버 시작 시 자동으로 카메라 활성화. 손바닥을 2초간 보여주면 제스처 제어 활성화.",
                 "endpoints": {
-                    "start": "/gesture/start",
-                    "stop": "/gesture/stop",
                     "status": "/gesture/status",
                     "info": "/gesture/info",
                     "health": "/gesture/health"
@@ -111,9 +115,8 @@ async def health_check():
     
     # 비접촉 터치 서비스 상태
     try:
-        # gesture_router의 전역 service 인스턴스 확인
-        if hasattr(gesture_router, 'service') and gesture_router.service is not None:
-            gesture_status = gesture_router.service.get_status()
+        if gesture_service is not None:
+            gesture_status = gesture_service.get_status()
             health_status["services"]["gesture_control"] = {
                 "status": "running" if gesture_status.get("running") else "stopped",
                 "active": gesture_status.get("active", False),
@@ -121,8 +124,7 @@ async def health_check():
             }
         else:
             health_status["services"]["gesture_control"] = {
-                "status": "not_started",
-                "message": "Use POST /gesture/start to initialize"
+                "status": "not_initialized"
             }
     except Exception as e:
         health_status["services"]["gesture_control"] = {
@@ -135,6 +137,8 @@ async def health_check():
 @app.on_event("startup")
 async def startup_event():
     """FastAPI 시작 시 실행"""
+    global gesture_service
+    
     print("=" * 60)
     print("🚀 통합 API 시스템 시작...")
     print("=" * 60)
@@ -156,19 +160,52 @@ async def startup_event():
     voice_service.initialize()
     print("✅ 음성 주문 서비스 시작 완료")
     
-    # 비접촉 터치 서비스 (API로 제어)
-    print("\n[3/3] 비접촉 터치 서비스 준비 완료")
-    print("   → 웹캠 (카메라 인덱스: 1 또는 외장 카메라)")
-    print("   → API를 통해 시작: POST /gesture/start")
-
+    # 비접촉 터치 서비스 자동 시작
+    print("\n[3/3] 비접촉 터치 서비스 시작 중...")
+    print("   → 웹캠 (카메라 인덱스: 0)")
+    try:
+        # 제스처 설정 (카메라 인덱스 0)
+        gesture_config = {
+            'camera_index': 0,  # 카메라 인덱스 0
+            'palm_hold_duration': 2.0,
+            'no_hand_timeout': 2.0,
+            'smoothing': 2,
+            'pinch_threshold': 40,
+            'swipe_threshold': 100,
+            'scroll_threshold': 25,
+            'scroll_sensitivity': 120,
+        }
+        
+        gesture_service = HandGestureService(gesture_config)
+        success = gesture_service.start()
+        
+        if success:
+            # gesture_router에도 서비스 인스턴스 전달
+            gesture_router.gesture_service = gesture_service
+            gesture_router.service = gesture_service
+            
+            print("✅ 비접촉 터치 서비스 시작 완료")
+            print("   💡 카메라 화면이 자동으로 표시됩니다 (개발 모드)")
+            print("   💡 손바닥을 2초간 보여주면 제스처 제어가 활성화됩니다")
+            print("   💡 ESC 키를 누르면 제스처 서비스가 종료됩니다")
+        else:
+            print("❌ 비접촉 터치 서비스 시작 실패")
+            print("   → 카메라를 열 수 없습니다. 로그를 확인하세요.")
+            gesture_service = None
+    except Exception as e:
+        print(f"❌ 비접촉 터치 서비스 오류: {e}")
+        gesture_service = None
+    
     print("\n" + "=" * 60)
     print("✅ 모든 서비스 준비 완료!")
     print("📍 서버 주소: http://0.0.0.0:8000")
     print("📚 API 문서: http://0.0.0.0:8000/docs")
     print("🏥 헬스 체크: http://0.0.0.0:8000/health")
     print("\n💡 카메라 구성:")
-    print("   - 얼굴 감지: RealSense 카메라 (전용)")
-    print("   - 비접촉 터치: 웹캠 (카메라 인덱스 1)")
+    print("   - 얼굴 감지: RealSense 카메라")
+    print("   - 비접촉 터치: 웹캠 (카메라 인덱스 0)")
+    print("\n🎥 비접촉 터치:")
+    print("   - 손바닥을 2초간 보여주면 활성화")
     print("=" * 60 + "\n")
 
 
@@ -180,20 +217,20 @@ async def shutdown_event():
     print("=" * 60)
     
     # 얼굴 감지 서비스 종료
-    print("\n[1/2] 얼굴 감지 서비스 종료 중...")
+    print("\n[1/3] 얼굴 감지 서비스 종료 중...")
     face_analyzer.stop()
     print("✅ 얼굴 감지 서비스 종료 완료")
     
     # 음성 주문 서비스 종료
-    print("\n[2/2] 음성 주문 서비스 종료 중...")
+    print("\n[2/3] 음성 주문 서비스 종료 중...")
     voice_service.cleanup()
     print("✅ 음성 주문 서비스 종료 완료")
     
     # 비접촉 터치 서비스 종료
     print("\n[3/3] 비접촉 터치 서비스 종료 중...")
     try:
-        if hasattr(gesture_router, 'service') and gesture_router.service is not None:
-            gesture_router.service.stop()
+        if gesture_service is not None:
+            gesture_service.stop()
             print("✅ 비접촉 터치 서비스 종료 완료")
         else:
             print("ℹ️  비접촉 터치 서비스가 실행 중이 아닙니다.")

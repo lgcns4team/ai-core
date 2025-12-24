@@ -25,8 +25,8 @@ class HandGestureService:
         
         Args:
             config: 설정 딕셔너리
-                - camera_index: 카메라 인덱스 (기본: 1)
-                - palm_hold_duration: 활성화 손바닥 유지 시간 (기본: 3.0초)
+                - camera_index: 카메라 인덱스 (기본: 0)
+                - palm_hold_duration: 활성화 손바닥 유지 시간 (기본: 2.0초)
                 - no_hand_timeout: 비활성화 타임아웃 (기본: 2.0초)
                 - smoothing: 마우스 스무딩 (기본: 2)
                 - pinch_threshold: 핀치 임계값 (기본: 40)
@@ -45,13 +45,19 @@ class HandGestureService:
         
         # MediaPipe Hands 초기화
         self.mp_hands = mp.solutions.hands
-        self.mp_drawing = mp.solutions.drawing_utils
+        
+        # 인식 거리 설정
+        min_detection = config.get('min_detection_confidence', 0.5)  # 기본 0.5 (멀리서도 인식)
+        min_tracking = config.get('min_tracking_confidence', 0.5)
+        
         self.hands = self.mp_hands.Hands(
             static_image_mode=False,
             max_num_hands=2,
-            min_detection_confidence=0.7,
-            min_tracking_confidence=0.5
+            min_detection_confidence=min_detection,  # 낮을수록 멀리서도 인식 (0.3~0.7)
+            min_tracking_confidence=min_tracking     # 추적 안정성
         )
+        
+        logger.info(f"손 인식 거리 설정 - detection: {min_detection}, tracking: {min_tracking}")
         
         # 카메라
         self.cap = None
@@ -78,7 +84,7 @@ class HandGestureService:
         self.last_hand_detected_time = None
         
         # 설정값
-        self.PALM_HOLD_DURATION = config.get('palm_hold_duration', 2.0)  # 기본 2초
+        self.PALM_HOLD_DURATION = config.get('palm_hold_duration', 2.0)
         self.NO_HAND_TIMEOUT = config.get('no_hand_timeout', 2.0)
         self.SMOOTHING = config.get('smoothing', 2)
         self.PINCH_THRESHOLD = config.get('pinch_threshold', 40)
@@ -149,11 +155,24 @@ class HandGestureService:
     # ===== 마우스 제어 =====
     
     def move_cursor(self, landmarks):
-        """커서 이동"""
+        """커서 이동 (80% 카메라 영역을 화면 전체로 매핑)"""
         index_tip = landmarks[5]
         
-        x = max(0, min(int(index_tip.x * self.screen_w), self.screen_w - 1))
-        y = max(0, min(int(index_tip.y * self.screen_h), self.screen_h - 1))
+        # 0.1 ~ 0.9 범위를 0.0 ~ 1.0으로 리매핑
+        mapped_x = (index_tip.x - 0.1) / 0.8
+        mapped_y = (index_tip.y - 0.1) / 0.8
+        
+        # 범위를 0.0 ~ 1.0으로 클램핑
+        mapped_x = max(0.0, min(1.0, mapped_x))
+        mapped_y = max(0.0, min(1.0, mapped_y))
+        
+        # 화면 좌표로 변환
+        x = int(mapped_x * self.screen_w)
+        y = int(mapped_y * self.screen_h)
+        
+        # 화면 범위 내로 제한
+        x = max(0, min(x, self.screen_w - 1))
+        y = max(0, min(y, self.screen_h - 1))
         
         # 스무딩
         cur_x = self.prev_x + (x - self.prev_x) / self.SMOOTHING
@@ -166,7 +185,7 @@ class HandGestureService:
         self.prev_x, self.prev_y = cur_x, cur_y
     
     def handle_pinch_click(self, landmarks):
-        """핀치 클릭 처리"""
+        """핀치 클릭 처리 (80% 카메라 영역 기준)"""
         if self.fist_mode:
             self.pinch_down = False
             return
@@ -174,10 +193,17 @@ class HandGestureService:
         thumb_tip = landmarks[4]
         index_tip = landmarks[8]
         
-        tx = int(thumb_tip.x * self.screen_w)
-        ty = int(thumb_tip.y * self.screen_h)
-        ix = int(index_tip.x * self.screen_w)
-        iy = int(index_tip.y * self.screen_h)
+        # 80% 영역으로 리매핑
+        thumb_x = (thumb_tip.x - 0.1) / 0.8
+        thumb_y = (thumb_tip.y - 0.1) / 0.8
+        index_x = (index_tip.x - 0.1) / 0.8
+        index_y = (index_tip.y - 0.1) / 0.8
+        
+        # 화면 좌표로 변환
+        tx = int(thumb_x * self.screen_w)
+        ty = int(thumb_y * self.screen_h)
+        ix = int(index_x * self.screen_w)
+        iy = int(index_y * self.screen_h)
         
         dist = np.hypot(ix - tx, iy - ty)
         now = time.time()
@@ -187,16 +213,22 @@ class HandGestureService:
                 self.pinch_down = True
                 self.last_click_time = now
                 pyautogui.click()
-                logger.debug("클릭")
+                logger.debug("🖱️  클릭")
         
         elif dist >= self.PINCH_THRESHOLD and self.pinch_down:
             self.pinch_down = False
     
     def handle_fist_gesture(self, landmarks):
-        """주먹 제스처 처리 (스와이프, 스크롤)"""
+        """주먹 제스처 처리 (스와이프, 스크롤) - 80% 카메라 영역 기준"""
         base_point = landmarks[0]
-        cx = int(base_point.x * self.screen_w)
-        cy = int(base_point.y * self.screen_h)
+        
+        # 80% 영역으로 리매핑
+        mapped_x = (base_point.x - 0.1) / 0.8
+        mapped_y = (base_point.y - 0.1) / 0.8
+        
+        # 화면 좌표로 변환
+        cx = int(mapped_x * self.screen_w)
+        cy = int(mapped_y * self.screen_h)
         
         if self.fist_start_x is None or self.fist_start_y is None:
             self.fist_start_x, self.fist_start_y = cx, cy
@@ -211,10 +243,10 @@ class HandGestureService:
             if now - self.last_swipe_time > self.SWIPE_COOLDOWN:
                 if dx > 0:
                     pyautogui.hotkey('command', '[')
-                    logger.debug("앞으로")
+                    logger.debug("⬅️  앞으로")
                 else:
                     pyautogui.hotkey('command', ']')
-                    logger.debug("뒤로")
+                    logger.debug("➡️  뒤로")
                 self.last_swipe_time = now
                 self.fist_start_x, self.fist_start_y = cx, cy
         
@@ -222,6 +254,7 @@ class HandGestureService:
         elif abs(dy) > self.SCROLL_THRESHOLD and abs(dy) > abs(dx):
             scroll_amount = int(dy / self.SCROLL_SENS * 20)
             pyautogui.scroll(scroll_amount)
+            logger.debug(f"🔄 스크롤: {scroll_amount}")
             self.fist_start_x, self.fist_start_y = cx, cy
     
     # ===== 커서 숨김/표시 =====
@@ -235,7 +268,7 @@ class HandGestureService:
                     capture_output=True, timeout=0.5
                 )
                 self.cursor_hidden = True
-                logger.info("커서 숨김")
+                logger.info("🙈 커서 숨김")
             except:
                 pass
     
@@ -248,7 +281,7 @@ class HandGestureService:
                     capture_output=True, timeout=0.5
                 )
                 self.cursor_hidden = False
-                logger.info("커서 표시")
+                logger.info("👁️  커서 표시")
             except:
                 pass
     
@@ -271,17 +304,20 @@ class HandGestureService:
             if primary_hand is not None:
                 lm = primary_hand.landmark
                 
-                # 활성화 체크 (손바닥 3초 유지)
+                # 활성화 체크 (손바닥 2초 유지)
                 if self.is_palm_open(lm) and not self.system_active:
                     if self.palm_show_start_time is None:
                         self.palm_show_start_time = time.time()
-                        logger.info("손바닥 감지 시작")
+                        logger.info("✋ 손바닥 감지 시작")
                     else:
                         elapsed = time.time() - self.palm_show_start_time
+                        remaining = self.PALM_HOLD_DURATION - elapsed
+                        if remaining > 0:
+                            logger.debug(f"⏱️  활성화 대기 중... {remaining:.1f}초 남음")
                         if elapsed >= self.PALM_HOLD_DURATION:
                             self.system_active = True
                             self.show_cursor()
-                            logger.info("✅ 시스템 활성화")
+                            logger.info("✅ 시스템 활성화!")
                             self.palm_show_start_time = None
                 else:
                     self.palm_show_start_time = None
@@ -296,11 +332,11 @@ class HandGestureService:
                     
                     if fist_now and not self.fist_mode:
                         self.fist_mode = True
-                        logger.debug("주먹 모드")
+                        logger.info("👊 주먹 모드 (스와이프/스크롤)")
                     elif not fist_now and self.fist_mode:
                         self.fist_mode = False
                         self.fist_start_x, self.fist_start_y = None, None
-                        logger.debug("일반 모드")
+                        logger.info("👆 일반 모드 (마우스 이동/클릭)")
                     
                     # 제스처 처리
                     if self.fist_mode:
@@ -310,12 +346,17 @@ class HandGestureService:
         
         # 자동 비활성화 (손 2초 미감지)
         if not hand_detected and self.system_active and self.last_hand_detected_time:
-            if time.time() - self.last_hand_detected_time >= self.NO_HAND_TIMEOUT:
+            time_since = time.time() - self.last_hand_detected_time
+            if time_since >= self.NO_HAND_TIMEOUT:
                 self.system_active = False
                 self.hide_cursor()
-                logger.info("⏱️ 자동 비활성화")
+                logger.info("⏱️  자동 비활성화 (손 미감지)")
                 self.last_hand_detected_time = None
                 self.fist_mode = False
+            else:
+                remaining = self.NO_HAND_TIMEOUT - time_since
+                if int(remaining * 10) % 10 == 0:  # 0.1초마다 로그
+                    logger.debug(f"⚠️  손 미감지: {remaining:.1f}초 후 비활성화")
         
         return self.system_active
     
@@ -323,12 +364,35 @@ class HandGestureService:
     
     def run(self):
         """메인 실행 루프"""
-        camera_index = self.config.get('camera_index', 1)
+        camera_index = self.config.get('camera_index', 0)
+        logger.info(f"📹 카메라 {camera_index} 열기 시도 중...")
+        
         self.cap = cv2.VideoCapture(camera_index)
+        
+        # 카메라 열기 실패 체크
+        if not self.cap.isOpened():
+            logger.error(f"❌ 카메라 {camera_index}를 열 수 없습니다.")
+            logger.error("해결 방법:")
+            logger.error("  1. python test_gesture_visual.py로 카메라 테스트")
+            logger.error("  2. .env 파일의 GESTURE_CAMERA_INDEX 수정")
+            logger.error("  3. 다른 프로그램에서 카메라 사용 중인지 확인")
+            self.running = False
+            return
+        
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         
-        logger.info("비접촉 터치 시스템 시작")
+        # 첫 프레임 읽기 테스트
+        ret, _ = self.cap.read()
+        if not ret:
+            logger.error(f"❌ 카메라 {camera_index}에서 프레임을 읽을 수 없습니다.")
+            self.cap.release()
+            self.running = False
+            return
+        
+        logger.info(f"✅ 카메라 {camera_index} 정상 작동")
+        logger.info("🎥 비접촉 터치 시스템 시작")
+        logger.info(f"💡 손바닥을 {self.PALM_HOLD_DURATION}초간 보여주면 활성화됩니다")
         
         # 초기 커서 숨김
         self.hide_cursor()
@@ -340,6 +404,7 @@ class HandGestureService:
                     time.sleep(0.01)
                     continue
                 
+                # 프레임 처리
                 self.process_frame(frame)
                 
                 # 작은 딜레이
@@ -349,37 +414,64 @@ class HandGestureService:
             if self.cap:
                 self.cap.release()
             cv2.destroyAllWindows()
-            self.show_cursor()  # 종료 시 커서 복구
-            logger.info("비접촉 터치 시스템 종료")
+            self.show_cursor()
+            logger.info("🛑 비접촉 터치 시스템 종료")
     
     # ===== 서비스 제어 =====
     
     def start(self):
         """서비스 시작"""
         if self.running:
-            logger.warning("이미 실행 중입니다")
+            logger.warning("⚠️  이미 실행 중입니다")
             return False
+        
+        camera_index = self.config.get('camera_index', 0)
+        logger.info(f"🚀 HandGestureService 시작 중... (카메라: {camera_index})")
         
         self.running = True
         self.thread = threading.Thread(target=self.run, daemon=True)
         self.thread.start()
-        logger.info("HandGestureService 시작됨")
+        
+        # 카메라 초기화 대기 (최대 2초)
+        for i in range(20):
+            time.sleep(0.1)
+            if not self.running:  # run()에서 실패로 running=False 설정됨
+                logger.error("❌ HandGestureService 시작 실패 - 카메라를 열 수 없습니다")
+                return False
+            if self.cap is not None and self.cap.isOpened():
+                logger.info("✅ HandGestureService 시작 완료")
+                return True
+        
+        logger.info("✅ HandGestureService 시작됨")
         return True
     
     def stop(self):
         """서비스 중지"""
+        logger.info("🛑 HandGestureService 중지 중...")
         self.running = False
         if self.thread:
             self.thread.join(timeout=2)
-        self.show_cursor()  # 커서 복구
-        logger.info("HandGestureService 중지됨")
+        self.show_cursor()
+        logger.info("✅ HandGestureService 중지됨")
     
     def get_status(self) -> dict:
         """현재 상태 반환"""
-        return {
+        status = {
             "running": self.running,
             "active": self.system_active,
             "fist_mode": self.fist_mode,
             "pinch_down": self.pinch_down,
             "cursor_hidden": self.cursor_hidden,
         }
+        
+        # 상태 로그
+        if self.running:
+            if self.system_active:
+                mode = "주먹 모드" if self.fist_mode else "일반 모드"
+                logger.debug(f"📊 상태: 실행 중 | 활성화됨 | {mode}")
+            else:
+                logger.debug("📊 상태: 실행 중 | 비활성화됨")
+        else:
+            logger.debug("📊 상태: 중지됨")
+        
+        return status
