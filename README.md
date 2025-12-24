@@ -104,7 +104,7 @@ source venv/bin/activate
 ### 3. 패키지 설치
 
 ```bash
-pip install -r requirements.txt
+pip install -r my_req.txt
 ```
 
 **참고**: 처음 설치 시 10-15분 정도 걸릴 수 있습니다.
@@ -117,6 +117,12 @@ cp .env.example .env
 
 # .env 파일을 열어 OpenAI API 키 입력
 # OPENAI_API_KEY=sk-your-actual-api-key-here
+HOST=0.0.0.0
+PORT=8000
+ENABLE_VOICE=true
+ENABLE_DETECTION=false
+ENABLE_GESTURE=true
+GESTURE_CAMERA_INDEX=1
 ```
 
 ---
