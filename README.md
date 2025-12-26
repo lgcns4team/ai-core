@@ -40,40 +40,38 @@ Intel RealSense 기반 얼굴 감지/분석 API와 음성 인식 기반 주문 A
 ## 📁 프로젝트 구조
 
 ```
-integrated_api/
-├── main.py                    # ⭐ 통합 메인 애플리케이션
-├── run.py                     # Windows 실행 스크립트
-├── requirements.txt           # 패키지 의존성
-├── .env.example              # 환경 변수 예시
-├── .gitignore                # Git 제외 파일
+AI-CORE/
+├── config/
+│   └── settings.py              ✅ 업데이트됨
 │
-├── config/                    # 설정
-│   ├── __init__.py
-│   └── settings.py           # 전역 설정 (API 키, 모델 설정)
+├── models/
+│   └── voice.py                 ✓ 기존 유지
 │
-├── routers/                   # API 라우터 (엔드포인트)
-│   ├── __init__.py
-│   ├── detect.py             # 얼굴 감지 API
-│   └── voice.py              # 음성 주문 API
+├── routers/
+│   ├── detect.py                ✓ 기존 유지
+│   ├── voice.py                 ✓ 기존 유지
+│   └── gesture.py               🆕 새로 추가
 │
-├── services/                  # 비즈니스 로직
-│   ├── __init__.py
-│   ├── detect.py             # 얼굴 감지 서비스
-│   └── voice.py              # 음성 주문 서비스
+├── services/
+│   ├── detect.py                ✓ 기존 유지
+│   ├── voice.py                 ✓ 기존 유지
+│   └── gesture.py               🆕 새로 추가
 │
-├── schemas/                   # 데이터 검증 (Pydantic)
-│   ├── __init__.py
-│   ├── detect.py             # 얼굴 감지 스키마
-│   └── voice.py              # 음성 주문 스키마
+├── schemas/
+│   ├── detect.py                ✓ 기존 유지
+│   ├── voice.py                 ✓ 기존 유지
+│   └── gesture.py               🆕 선택 추가 (schemas_gesture.py)
 │
-├── models/                    # 데이터 모델
-│   ├── __init__.py
-│   └── voice.py              # 메뉴/옵션 데이터베이스
+├── utils/
+│   ├── audio.py                 ✓ 기존 유지
+│   └── parser.py                ✓ 기존 유지
 │
-└── utils/                     # 유틸리티
-    ├── __init__.py
-    ├── audio.py              # 오디오 처리 (노이즈 제거)
-    └── parser.py             # 명령어 파싱
+├── .env                         ✅ 업데이트됨
+├── .env.example                 🆕 새로 추가
+├── main.py                      ✅ 업데이트됨
+├── my_req.txt                   ✅ 업데이트됨
+├── README.md                    🆕 새로 추가
+└── INTEGRATION_GUIDE.md         📚 참고 문서
 ```
 
 ---

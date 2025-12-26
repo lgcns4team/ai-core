@@ -21,3 +21,22 @@ MENU_KEYWORDS = "카페 주문. 아메리카노, 라떼, 바닐라라떼, 프라
 
 # 임시 파일 저장 경로
 TEMP_FILE_DIR = "temp"
+
+# ===== 비접촉 터치 설정 (Gesture) =====
+GESTURE_CONFIG = {
+    # 카메라 설정
+    'camera_index': int(os.getenv("GESTURE_CAMERA_INDEX", "1")),
+    
+    # 활성화 설정
+    'palm_hold_duration': float(os.getenv("GESTURE_PALM_DURATION", "2.0")),
+    'no_hand_timeout': float(os.getenv("GESTURE_TIMEOUT", "2.0")),
+    
+    # 마우스 제어
+    'smoothing': int(os.getenv("GESTURE_SMOOTHING", "2")),
+    
+    # 제스처 임계값
+    'pinch_threshold': int(os.getenv("GESTURE_PINCH_THRESHOLD", "40")),
+    'swipe_threshold': int(os.getenv("GESTURE_SWIPE_THRESHOLD", "100")),
+    'scroll_threshold': int(os.getenv("GESTURE_SCROLL_THRESHOLD", "25")),
+    'scroll_sensitivity': int(os.getenv("GESTURE_SCROLL_SENSITIVITY", "120")),
+}
