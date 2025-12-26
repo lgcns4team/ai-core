@@ -1,8 +1,6 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
-import shutil
-import os
 from typing import Dict
-from schemas.voice import VoiceOrderResponse, ErrorResponse
+from schemas.voice import VoiceOrderResponse
 
 router = APIRouter(prefix="/order")
 
@@ -23,41 +21,34 @@ def get_service():
     return _service
 
 
+
+
 @router.post(
     "/voice",
     response_model=VoiceOrderResponse,
     summary="음성 주문 처리",
     description="음성 파일을 업로드하여 주문 의도를 분석하고 주문 액션을 반환합니다."
 )
+
 async def voice_order(file: UploadFile = File(...)) -> Dict:
     """
-    음성 주문 처리
-    
-    Args:
-        file: 업로드된 음성 파일 (.webm, .wav, .mp3 등)
-        
-    Returns:
-        인식된 텍스트와 주문 액션 리스트
+    음성 주문 처리 (Zero-Copy Optimization)
     """
     service = get_service()
     
-    # 임시 파일로 저장
-    temp_path = f"temp_upload_{file.filename}"
-    
     try:
-        # 파일 저장
-        with open(temp_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        # 1. 파일 내용을 메모리로 읽기 (await 필수)
+        # 디스크에 저장하지 않습니다.
+        file_bytes = await file.read()
         
-        # 음성 주문 처리
-        result = service.process_voice_order(temp_path, file.filename)
+        # 2. 바이트 데이터를 서비스로 전달
+        result = service.process_voice_order(file_bytes)
         
         return result
     
     except Exception as e:
         print(f"⚠️ 음성 주문 API 에러: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    
     finally:
         # 임시 파일 삭제
         if os.path.exists(temp_path):
