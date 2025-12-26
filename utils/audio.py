@@ -1,40 +1,46 @@
-import librosa
-import soundfile as sf
-import noisereduce as nr
+import ffmpeg
+import numpy as np
 import shutil
 from config.settings import AUDIO_SAMPLE_RATE, NOISE_REDUCTION_PROP
 
 
-def remove_noise(input_path: str, output_path: str) -> None:
+def load_audio_with_ffmpeg(file_bytes: bytes, sr: int = 16000) -> np.ndarray:
     """
-    오디오 파일의 노이즈 제거
+    FFmpeg를 사용하여 오디오 로드 및 Bandpass Filter 적용 (In-Memory)
     
     Args:
-        input_path: 입력 오디오 파일 경로
-        output_path: 출력 오디오 파일 경로
-    """
-    print(f"🧹 노이즈 제거 시작: {input_path}")
-    try:
-        # 1. 파일 읽기 (librosa는 모든 포맷을 자동으로 변환)
-        y, sr = librosa.load(input_path, sr=AUDIO_SAMPLE_RATE)
+        file_bytes: 업로드된 파일의 바이너리 데이터
+        sr: 샘플링 레이트 (Whisper는 16000 권장)
         
-        # 2. 노이즈 제거
-        # prop_decrease: 잡음 감소 비율 (너무 높으면 목소리 왜곡됨)
-        reduced_noise = nr.reduce_noise(
-            y=y, 
-            sr=sr, 
-            stationary=True, 
-            prop_decrease=NOISE_REDUCTION_PROP
+    Returns:
+        Numpy float32 배열 (Whisper 입력용)
+    """
+    try:
+        # FFmpeg 파이프라인
+        # 1. pipe:0 -> 메모리에서 입력
+        # 2. highpass=200 -> 웅~ 하는 저음(팬소음) 제거
+        # 3. lowpass=3000 -> 치~ 하는 고음(전기노이즈) 제거
+        out, _ = (
+            ffmpeg
+            .input('pipe:0')
+            .filter('highpass', f='200')
+            .filter('lowpass', f='3000')
+            .output('pipe:1', format='f32le', acodec='pcm_f32le', ac=1, ar=str(sr))
+            .run(input=file_bytes, capture_stdout=True, capture_stderr=True)
         )
         
-        # 3. 저장
-        sf.write(output_path, reduced_noise, sr)
-        print("🧹 노이즈 제거 완료")
+        # 바이트 데이터를 Numpy 배열로 변환
+        return np.frombuffer(out, np.float32)
         
+    except ffmpeg.Error as e:
+        print(f"❌ FFmpeg 처리 오류: {e.stderr.decode()}")
+        raise e
     except Exception as e:
-        print(f"⚠️ 노이즈 제거 실패: {e}")
-        # 실패 시 원본을 그대로 복사 (비상 대책)
-        shutil.copy(input_path, output_path)
+        print(f"⚠️ 오디오 처리 실패: {e}")
+        # 실패 시 빈 배열 반환
+        return np.array([], dtype=np.float32)
+
+
 
 
 def validate_audio_file(file_path: str) -> bool:

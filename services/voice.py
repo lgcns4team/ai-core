@@ -4,6 +4,7 @@ import shutil
 from faster_whisper import WhisperModel
 from openai import OpenAI
 from typing import List, Dict, Any
+import numpy as np
 
 from config.settings import (
     OPENAI_API_KEY,
@@ -13,7 +14,7 @@ from config.settings import (
     MENU_KEYWORDS
 )
 from models.voice import get_all_menu_ids, get_all_option_ids
-from utils.audio import remove_noise, validate_audio_file
+from utils.audio import load_audio_with_ffmpeg
 from utils.parser import process_commands
 
 
@@ -42,21 +43,16 @@ class VoiceOrderService:
     
     def transcribe_audio(self, audio_path: str) -> str:
         """
-        오디오 파일을 텍스트로 변환 (STT)
-        
-        Args:
-            audio_path: 오디오 파일 경로
-            
-        Returns:
-            인식된 텍스트
+        오디오 데이터(Numpy Array)를 텍스트로 변환
         """
         try:
+            # Whisper는 파일 경로뿐만 아니라 Numpy Array도 입력받음
             segments, info = self.whisper_model.transcribe(
-                audio_path,
+                audio_data,
                 language="ko",
                 beam_size=5,
                 initial_prompt=MENU_KEYWORDS,
-                vad_filter=True,  # 목소리가 없는 구간 자동 필터링
+                vad_filter=True,
                 vad_parameters=dict(min_silence_duration_ms=500)
             )
             
@@ -67,6 +63,7 @@ class VoiceOrderService:
         except Exception as e:
             print(f"⚠️ STT 변환 실패: {e}")
             return ""
+    
     
     def analyze_intent(self, text: str) -> str:
         """
@@ -146,39 +143,29 @@ class VoiceOrderService:
             print(f"⚠️ LLM API 에러: {e}")
             return ""
     
-    def process_voice_order(self, file_path: str, filename: str) -> Dict[str, Any]:
+    def process_voice_order(self, file_bytes: bytes) -> Dict[str, Any]:
         """
-        음성 파일을 처리하여 주문 액션 반환
-        
-        Args:
-            file_path: 업로드된 파일 경로
-            filename: 원본 파일명
-            
-        Returns:
-            주문 결과 (text, actions)
+        업로드된 파일 바이트를 직접 처리 (속도 최적화)
         """
-        # 고유 ID 생성
-        unique_id = str(uuid.uuid4())
-        temp_filename = f"temp_{unique_id}.webm"
-        clean_filename = f"clean_{unique_id}.wav"
-        
         try:
-            # 1. 원본 저장
-            shutil.copy(file_path, temp_filename)
+            # 1. FFmpeg로 노이즈 제거 및 디코딩 (In-Memory)
+            # 파일 저장 과정(shutil.copy) 삭제됨 -> 속도 대폭 향상
+            clean_audio = load_audio_with_ffmpeg(file_bytes)
             
-            # 2. 노이즈 제거
-            remove_noise(temp_filename, clean_filename)
-            
-            # 3. STT 변환
-            text = self.transcribe_audio(clean_filename)
+            if clean_audio.size == 0:
+                return {"text": "", "actions": []}
+
+            # 2. STT 변환 (Numpy Array 직접 입력)
+            text = self.transcribe_audio(clean_audio)
             
             if not text:
                 return {"text": "", "actions": []}
             
-            # 4. LLM 분석
+            # 3. LLM 분석 (기존 로직 사용, analyze_intent 구현 필요)
+            # 임시로 위에서 생략했으므로, 실제 파일에는 기존 코드가 있어야 함
             llm_output = self.analyze_intent(text)
             
-            # 5. 명령어 파싱
+            # 4. 명령어 파싱
             actions = process_commands(llm_output)
             
             return {"text": text, "actions": actions}
@@ -186,18 +173,6 @@ class VoiceOrderService:
         except Exception as e:
             print(f"⚠️ 음성 주문 처리 실패: {e}")
             return {"text": "오류 발생", "actions": []}
-        
-        finally:
-            # 6. 임시 파일 정리
-            for path in [temp_filename, clean_filename]:
-                if os.path.exists(path):
-                    try:
-                        os.remove(path)
-                    except:
-                        pass
     
     def cleanup(self):
-        """서비스 종료 시 정리 작업"""
-        print("🧹 서비스 정리 중...")
-        # 필요시 추가 정리 작업
-        print("✅ 정리 완료")
+        print("✅ 서비스 종료")
