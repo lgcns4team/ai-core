@@ -1,6 +1,6 @@
 import re
 from typing import List, Dict, Any
-from models.voice import MENU_DB, OPTION_DB, get_menu_info, get_option_info
+from models.voice import get_menu_info, get_option_info  # MENU_DB, OPTION_DB 제거
 
 
 def process_commands(llm_output: str) -> List[Dict[str, Any]]:
@@ -53,23 +53,28 @@ def process_commands(llm_output: str) -> List[Dict[str, Any]]:
 
             # ADD / UPDATE 명령어 처리
             if command in ["ADD", "UPDATE"]:
-                if len(parts) < 2:
+                if len(parts) < 5:
                     continue
                 
-                target_id = parts[1]
-                new_menu_id = parts[2] if command == "UPDATE" else parts[1]
-                qty_idx = 3 if command == "UPDATE" else 2
-                opt_idx = 4 if command == "UPDATE" else 3
+                if command == "ADD":
+                        target_id = parts[1]      # 메뉴ID
+                        new_menu_id = parts[1]    # 메뉴ID (동일)
+                else:  # UPDATE
+                    target_id = parts[1]      # 찾을ID
+                    new_menu_id = parts[2]    # 바뀔메뉴명
                 
+                qty_idx = 3                   # 둘 다 수량은 3번째
+                opt_idx = 4                   # 둘 다 옵션은 4번째
+        
                 # 수량 파싱
                 qty_str = parts[qty_idx] if len(parts) > qty_idx else "1"
                 match = re.search(r'\d+', qty_str)
                 qty = int(match.group()) if match else 1
 
-                # 메뉴 검증
-                if new_menu_id not in MENU_DB:
-                    continue
+                # 메뉴 검증 (API 기반)
                 menu_info = get_menu_info(new_menu_id)
+                if not menu_info:
+                    continue
 
                 # 옵션 파싱
                 if len(parts) > opt_idx:
@@ -78,7 +83,8 @@ def process_commands(llm_output: str) -> List[Dict[str, Any]]:
                 else:
                     raw_options = []
                 
-                valid_option_ids = [o for o in raw_options if o in OPTION_DB]
+                # 옵션 검증 (API 기반)
+                valid_option_ids = [o for o in raw_options if get_option_info(o) is not None]
 
                 # ADD의 경우 기본 옵션 추가
                 if command == "ADD":
@@ -98,8 +104,9 @@ def process_commands(llm_output: str) -> List[Dict[str, Any]]:
                 option_names = []
                 for opt_id in valid_option_ids:
                     opt_info = get_option_info(opt_id)
-                    total_price += opt_info["price"]
-                    option_names.append(opt_info["name"])
+                    if opt_info:  # None 체크 추가
+                        total_price += opt_info["price"]
+                        option_names.append(opt_info["name"])
                 
                 total_price *= qty
                 
@@ -112,6 +119,8 @@ def process_commands(llm_output: str) -> List[Dict[str, Any]]:
                     "price": total_price,
                     "quantity": qty
                 }
+
+                print(f"🔍 생성된 액션: {action_data}")
 
                 if command == "UPDATE":
                     actions.append({
