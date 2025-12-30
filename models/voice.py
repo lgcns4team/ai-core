@@ -70,7 +70,7 @@ class MenuAPIClient:
                         logger.error("💀 모든 재시도 실패! AI 음성인식을 시작할 수 없습니다.")
                         logger.error("🔧 해결방법:")
                         logger.error("   1. 백엔드 서버가 실행중인지 확인: docker-compose ps")
-                        logger.error("   2. API 엔드포인트 확인: curl http://localhost:8080/api/ai/complete-data")
+                        logger.error("   2. API 엔드포인트 확인: curl http://localhost:8080/nok-nok/api/ai/complete-data")
                         logger.error("   3. 네트워크 연결 상태 확인")
                         logger.error("   4. 백엔드 로그 확인: docker-compose logs backend")
                         raise RuntimeError(f"API 연결 실패 - {max_retries}회 재시도 후 포기")

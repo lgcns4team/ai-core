@@ -47,7 +47,7 @@ voice_router.set_service(voice_service)
 
 # 라우터 등록 - /nok-nok 프리픽스 추가
 app.include_router(detect_router.router, prefix="/nok-nok", tags=["Face Detection"])
-app.include_router(voice_router.router, prefix="/nok-nok", tags=["Voice Order"])
+app.include_router(voice_router.router, prefix="", tags=["Voice Order"])
 app.include_router(gesture_router.router, prefix="/nok-nok", tags=["Gesture Control"])
 
 
@@ -250,7 +250,7 @@ if __name__ == '__main__':
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8080,
+        port=8000,
         reload=False,
         log_level="info"
     )
