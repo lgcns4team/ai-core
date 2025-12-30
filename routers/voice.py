@@ -1,3 +1,4 @@
+import os
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from typing import Dict
 from schemas.voice import VoiceOrderResponse
@@ -21,15 +22,12 @@ def get_service():
     return _service
 
 
-
-
 @router.post(
     "/voice",
     response_model=VoiceOrderResponse,
     summary="음성 주문 처리",
     description="음성 파일을 업로드하여 주문 의도를 분석하고 주문 액션을 반환합니다."
 )
-
 async def voice_order(file: UploadFile = File(...)) -> Dict:
     """
     음성 주문 처리 (Zero-Copy Optimization)
@@ -49,13 +47,7 @@ async def voice_order(file: UploadFile = File(...)) -> Dict:
     except Exception as e:
         print(f"⚠️ 음성 주문 API 에러: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        # 임시 파일 삭제
-        if os.path.exists(temp_path):
-            try:
-                os.remove(temp_path)
-            except:
-                pass
+    # finally 블록 제거 - 임시 파일을 사용하지 않으므로 정리할 필요 없음
 
 
 @router.get(

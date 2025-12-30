@@ -41,7 +41,7 @@ class VoiceOrderService:
         self.openai_client = OpenAI(api_key=OPENAI_API_KEY)
         print("✅ OpenAI 클라이언트 초기화 완료")
     
-    def transcribe_audio(self, audio_path: str) -> str:
+    def transcribe_audio(self, audio_data: np.ndarray) -> str:
         """
         오디오 데이터(Numpy Array)를 텍스트로 변환
         """
@@ -88,6 +88,7 @@ class VoiceOrderService:
         2. **발음 기반 매칭**: 입력된 텍스트와 발음이 가장 유사한 메뉴/옵션 ID를 찾아라.
         3. **불필요한 말 무시**: "어...", "음...", "저기요" 같은 추임새는 과감히 버려라.
         4. **보수적 판단**: 메뉴판에 없는 말은 무시해라.
+        5. **메뉴, 옵션 분리**: 메뉴와 옵션을 명확히 구분하여 인식해라.
 
         [동작 종류]
         - ADD: 신규 추가
@@ -108,16 +109,24 @@ class VoiceOrderService:
         0. 문맥 참조 해결
         사용자가 메뉴명을 말하지 않고 "아까 담은 거", "방금 시킨 거", "그거", "이거" 라고 지칭하면 메뉴ID를 **`last_item`** 으로 적어라.
         
-        Format(형식): UPDATE | 찾을ID | 바뀔ID | 수량 | 새옵션1,새옵션2...
+        [⭐ 출력 형식 - 정확히 지켜라]
+        ADD 형식: ADD | 메뉴ID | 메뉴명 | 수량 | 옵션1,옵션2..
+        UPDATE 형식: UPDATE | 찾을ID | 바뀔메뉴명 | 수량 | 새옵션1,새옵션2..
+        REMOVE 형식: REMOVE | 메뉴ID | 삭제모드
+
+        [올바른 예시]
+        ADD | 아메리카노 | 아메리카노 | 2 | cold
+        ADD | 카페라떼 | 카페라떼 | 1 | hot,grande
+        UPDATE | last_item | 카페라떼 | 1 | cold,shot
 
         [옵션 매핑 규칙]
-        - "아이스", "차가운거", "냉", "아아", "차갑게" -> [cold]
-        - "따뜻한거", "뜨거운거", "따뜻하게", "핫" -> [hot]
-        - "톨", "작은거", "스몰", "스몰사이즈" -> [tall]
-        - "그란데", "중간사이즈", "미디엄" -> [grande]
-        - "벤티", "큰거", "라지", "라지 사이즈" -> [venti]
-        - "얼음 적게", "얼음 조금" -> [less_ice], "얼음 많이", "얼음 추가" -> [more_ice]
-        - "샷 추가" -> [shot], "휘핑", "힙", "휩" -> [whip], "연하게" -> [weak]
+        - "아이스", "차가운거", "냉", "아아", "차갑게" -> cold
+        - "따뜻한거", "뜨거운거", "따뜻하게", "핫" -> hot
+        - "톨", "작은거", "스몰", "스몰사이즈" -> tall
+        - "그란데", "중간사이즈", "미디엄" -> grande
+        - "벤티", "큰거", "라지", "라지 사이즈" -> venti
+        - "얼음 적게", "얼음 조금" -> less_ice, "얼음 많이", "얼음 추가" -> more_ice
+        - "샷 추가" -> shot, "휘핑", "힙", "휩" -> whip, "연하게" -> weak
 
         [출력]
         오직 데이터 라인만 출력해라. 설명 금지.
