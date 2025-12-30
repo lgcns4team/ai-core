@@ -1,3 +1,4 @@
+
 import ssl
 import uvicorn
 import threading
@@ -44,10 +45,10 @@ gesture_service = None  # 시작 시 초기화
 detect_router.set_analyzer(face_analyzer)
 voice_router.set_service(voice_service)
 
-# 라우터 등록
-app.include_router(detect_router.router, tags=["Face Detection"])
-app.include_router(voice_router.router, tags=["Voice Order"])
-app.include_router(gesture_router.router, tags=["Gesture Control"])  # 🆕 추가
+# 라우터 등록 - /nok-nok 프리픽스 추가
+app.include_router(detect_router.router, prefix="/nok-nok", tags=["Face Detection"])
+app.include_router(voice_router.router, prefix="/nok-nok", tags=["Voice Order"])
+app.include_router(gesture_router.router, prefix="/nok-nok", tags=["Gesture Control"])
 
 
 
@@ -61,16 +62,16 @@ async def root():
             "face_detection": {
                 "description": "Intel RealSense 기반 얼굴 감지 및 분석",
                 "endpoints": {
-                    "analysis": "/api/analysis",
-                    "status": "/api/status",
-                    "stream_status": "/api/stream/status"
+                    "analysis": "/nok-nok/api/analysis",
+                    "status": "/nok-nok/api/status",
+                    "stream_status": "/nok-nok/api/stream/status"
                 }
             },
             "voice_order": {
                 "description": "음성 인식 기반 주문 처리",
                 "endpoints": {
-                    "voice_order": "/order/voice",
-                    "test": "/order/test"
+                    "voice_order": "/nok-nok/order/voice",
+                    "test": "/nok-nok/order/test"
                 }
             },
             "gesture_control": {
@@ -78,9 +79,9 @@ async def root():
                 "status": "auto_start",
                 "note": "서버 시작 시 자동으로 카메라 활성화. 손바닥을 2초간 보여주면 제스처 제어 활성화.",
                 "endpoints": {
-                    "status": "/gesture/status",
-                    "info": "/gesture/info",
-                    "health": "/gesture/health"
+                    "status": "/nok-nok/gesture/status",
+                    "info": "/nok-nok/gesture/info",
+                    "health": "/nok-nok/gesture/health"
                 }
             }
         },
@@ -198,14 +199,17 @@ async def startup_event():
     
     print("\n" + "=" * 60)
     print("✅ 모든 서비스 준비 완료!")
-    print("📍 서버 주소: http://0.0.0.0:8000")
-    print("📚 API 문서: http://0.0.0.0:8000/docs")
-    print("🏥 헬스 체크: http://0.0.0.0:8000/health")
+    print("📍 서버 주소: http://0.0.0.0:8080")
+    print("📚 API 문서: http://0.0.0.0:8080/docs")
+    print("🏥 헬스 체크: http://0.0.0.0:8080/health")
     print("\n💡 카메라 구성:")
     print("   - 얼굴 감지: RealSense 카메라")
     print("   - 비접촉 터치: 웹캠 (카메라 인덱스 0)")
     print("\n🎥 비접촉 터치:")
     print("   - 손바닥을 2초간 보여주면 활성화")
+    print("\n📡 얼굴 인식 API:")
+    print("   - 분석 결과: http://localhost:8080/nok-nok/api/analysis")
+    print("   - SSE 스트림: http://localhost:8080/nok-nok/api/stream/status")
     print("=" * 60 + "\n")
 
 
@@ -246,7 +250,7 @@ if __name__ == '__main__':
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
+        port=8080,
         reload=False,
         log_level="info"
     )
