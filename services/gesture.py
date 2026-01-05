@@ -47,8 +47,8 @@ class HandGestureService:
         self.mp_hands = mp.solutions.hands
         
         # 인식 거리 설정
-        min_detection = config.get('min_detection_confidence', 0.5)  # 기본 0.5 (멀리서도 인식)
-        min_tracking = config.get('min_tracking_confidence', 0.5)
+        min_detection = config.get('min_detection_confidence', 0.6)  # 기본 0.5 (멀리서도 인식)
+        min_tracking = config.get('min_tracking_confidence', 0.6)
         
         self.hands = self.mp_hands.Hands(
             static_image_mode=False,
@@ -61,12 +61,11 @@ class HandGestureService:
         
         # 카메라
         self.cap = None
-        
+    
         # 상태 변수
         self.system_active = False
         self.running = False
         self.thread: Optional[threading.Thread] = None
-        self.cursor_hidden = False
         
         # 마우스 위치
         self.prev_x = self.screen_w // 2
@@ -86,11 +85,11 @@ class HandGestureService:
         # 설정값
         self.PALM_HOLD_DURATION = config.get('palm_hold_duration', 2.0)
         self.NO_HAND_TIMEOUT = config.get('no_hand_timeout', 2.0)
-        self.SMOOTHING = config.get('smoothing', 2)
+        self.SMOOTHING = config.get('smoothing', 3)
         self.PINCH_THRESHOLD = config.get('pinch_threshold', 40)
         self.SWIPE_THRESHOLD = config.get('swipe_threshold', 100)
         self.SCROLL_THRESHOLD = config.get('scroll_threshold', 25)
-        self.SCROLL_SENS = config.get('scroll_sensitivity', 120)
+        self.SCROLL_SENS = config.get('scroll_sensitivity', 100)
         self.CLICK_COOLDOWN = 0.2
         self.SWIPE_COOLDOWN = 0.5
         
@@ -257,33 +256,6 @@ class HandGestureService:
             logger.debug(f"🔄 스크롤: {scroll_amount}")
             self.fist_start_x, self.fist_start_y = cx, cy
     
-    # ===== 커서 숨김/표시 =====
-    
-    def hide_cursor(self):
-        """커서 숨기기 (맥)"""
-        if not self.cursor_hidden:
-            try:
-                subprocess.run(
-                    ['python3', '-c', 'import Quartz; Quartz.CGDisplayHideCursor(0)'],
-                    capture_output=True, timeout=0.5
-                )
-                self.cursor_hidden = True
-                logger.info("🙈 커서 숨김")
-            except:
-                pass
-    
-    def show_cursor(self):
-        """커서 표시 (맥)"""
-        if self.cursor_hidden:
-            try:
-                subprocess.run(
-                    ['python3', '-c', 'import Quartz; Quartz.CGDisplayShowCursor(0)'],
-                    capture_output=True, timeout=0.5
-                )
-                self.cursor_hidden = False
-                logger.info("👁️  커서 표시")
-            except:
-                pass
     
     # ===== 프레임 처리 =====
     
@@ -316,7 +288,6 @@ class HandGestureService:
                             logger.debug(f"⏱️  활성화 대기 중... {remaining:.1f}초 남음")
                         if elapsed >= self.PALM_HOLD_DURATION:
                             self.system_active = True
-                            self.show_cursor()
                             logger.info("✅ 시스템 활성화!")
                             self.palm_show_start_time = None
                 else:
@@ -349,7 +320,6 @@ class HandGestureService:
             time_since = time.time() - self.last_hand_detected_time
             if time_since >= self.NO_HAND_TIMEOUT:
                 self.system_active = False
-                self.hide_cursor()
                 logger.info("⏱️  자동 비활성화 (손 미감지)")
                 self.last_hand_detected_time = None
                 self.fist_mode = False
@@ -394,8 +364,6 @@ class HandGestureService:
         logger.info("🎥 비접촉 터치 시스템 시작")
         logger.info(f"💡 손바닥을 {self.PALM_HOLD_DURATION}초간 보여주면 활성화됩니다")
         
-        # 초기 커서 숨김
-        self.hide_cursor()
         
         try:
             while self.running:
@@ -414,7 +382,6 @@ class HandGestureService:
             if self.cap:
                 self.cap.release()
             cv2.destroyAllWindows()
-            self.show_cursor()
             logger.info("🛑 비접촉 터치 시스템 종료")
     
     # ===== 서비스 제어 =====
@@ -451,7 +418,6 @@ class HandGestureService:
         self.running = False
         if self.thread:
             self.thread.join(timeout=2)
-        self.show_cursor()
         logger.info("✅ HandGestureService 중지됨")
     
     def get_status(self) -> dict:
@@ -461,7 +427,6 @@ class HandGestureService:
             "active": self.system_active,
             "fist_mode": self.fist_mode,
             "pinch_down": self.pinch_down,
-            "cursor_hidden": self.cursor_hidden,
         }
         
         # 상태 로그
