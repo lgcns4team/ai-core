@@ -110,9 +110,14 @@ class VoiceOrderService:
         사용자가 메뉴명을 말하지 않고 "아까 담은 거", "방금 시킨 거", "그거", "이거" 라고 지칭하면 메뉴ID를 **`last_item`** 으로 적어라.
         
         [⭐ 출력 형식 - 정확히 지켜라]
-        ADD 형식: ADD | 메뉴ID | 메뉴명 | 수량 | 옵션1,옵션2..
-        UPDATE 형식: UPDATE | 찾을ID | 바뀔메뉴명 | 수량 | 새옵션1,새옵션2..
-        REMOVE 형식: REMOVE | 메뉴ID | 삭제모드
+        ADD 형식: ADD | 메뉴ID | 메뉴명 | 수량 | 옵션1,옵션2
+        UPDATE 형식: UPDATE | 찾을ID | 바뀔메뉴명 | 수량 | 새옵션1,새옵션2
+        REMOVE 형식: REMOVE | 메뉴ID | 삭제수량 | 삭제모드
+
+        [삭제 패턴 처리]
+        - "1잔만 빼줘" → REMOVE | last_item | 1 | last
+        - "첫 번째 라떼 삭제" → REMOVE | 카페라떼 | all | first  
+        - "아메리카노 2개 빼줘" → REMOVE | 아메리카노 | 2 | last
 
         [올바른 예시]
         ADD | 아메리카노 | 아메리카노 | 2 | cold
