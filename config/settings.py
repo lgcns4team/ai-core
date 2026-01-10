@@ -22,6 +22,16 @@ MENU_KEYWORDS = "카페 주문. 아메리카노, 라떼, 바닐라라떼, 프라
 # 임시 파일 저장 경로
 TEMP_FILE_DIR = "temp"
 
+GESTURE_USE_REALSENSE = os.getenv("GESTURE_USE_REALSENSE", "true").lower() == "true"
+GESTURE_CAMERA_INDEX = 0  # RealSense 사용 시 무시됨
+GESTURE_PALM_DURATION = 2.0
+GESTURE_TIMEOUT = 2.0
+GESTURE_SMOOTHING = 3
+GESTURE_PINCH_THRESHOLD = 40
+GESTURE_SWIPE_THRESHOLD = 100
+GESTURE_SCROLL_THRESHOLD = 25
+GESTURE_SCROLL_SENSITIVITY = 100
+
 # ===== 비접촉 터치 설정 (Gesture) =====
 GESTURE_CAMERA_INDEX=0
 GESTURE_PALM_DURATION=2.0
@@ -34,7 +44,8 @@ GESTURE_SCROLL_SENSITIVITY=100
 
 # ===== 비접촉 터치 설정 (Gesture) =====
 GESTURE_CONFIG = {
-    # 카메라 설정
+        # 카메라 설정
+    'use_realsense': GESTURE_USE_REALSENSE,
     'camera_index': int(GESTURE_CAMERA_INDEX),
     
     # 활성화 설정

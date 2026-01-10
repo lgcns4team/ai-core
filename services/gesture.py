@@ -25,7 +25,8 @@ class HandGestureService:
         
         Args:
             config: 설정 딕셔너리
-                - camera_index: 카메라 인덱스 (기본: 0)
+                - use_realsense: RealSense 사용 여부 (기본: False)
+                - camera_index: 웹캠 인덱스 (use_realsense=False일 때)
                 - palm_hold_duration: 활성화 손바닥 유지 시간 (기본: 2.0초)
                 - no_hand_timeout: 비활성화 타임아웃 (기본: 2.0초)
                 - smoothing: 마우스 스무딩 (기본: 2)
@@ -35,7 +36,13 @@ class HandGestureService:
                 - scroll_sensitivity: 스크롤 민감도 (기본: 120)
         """
         self.config = config
-        
+        self.use_realsense = config.get('use_realsense', False)
+
+        # RealSense 사용 시 카메라 서비스 참조
+        if self.use_realsense:
+            from services.camera import RealSenseCameraService
+            self.camera = RealSenseCameraService()
+
         # PyAutoGUI 설정
         pyautogui.FAILSAFE = False
         pyautogui.PAUSE = 0
@@ -61,7 +68,9 @@ class HandGestureService:
         
         # 카메라
         self.cap = None
-    
+        self.pipeline = None  # RealSense용
+        self.current_color = None
+
         # 상태 변수
         self.system_active = False
         self.running = False
@@ -183,6 +192,10 @@ class HandGestureService:
         pyautogui.moveTo(cur_x, cur_y)
         self.prev_x, self.prev_y = cur_x, cur_y
     
+    def _on_frame_received(self, depth_image, color_image):
+        """카메라 서비스로부터 프레임 수신 (RealSense 모드)"""
+        self.current_color = color_image
+
     def handle_pinch_click(self, landmarks):
         """핀치 클릭 처리 (80% 카메라 영역 기준)"""
         if self.fist_mode:
@@ -334,55 +347,86 @@ class HandGestureService:
     
     def run(self):
         """메인 실행 루프"""
-        camera_index = self.config.get('camera_index', 0)
-        logger.info(f"📹 카메라 {camera_index} 열기 시도 중...")
-        
-        self.cap = cv2.VideoCapture(camera_index)
-        
-        # 카메라 열기 실패 체크
-        if not self.cap.isOpened():
-            logger.error(f"❌ 카메라 {camera_index}를 열 수 없습니다.")
-            logger.error("해결 방법:")
-            logger.error("  1. python test_gesture_visual.py로 카메라 테스트")
-            logger.error("  2. .env 파일의 GESTURE_CAMERA_INDEX 수정")
-            logger.error("  3. 다른 프로그램에서 카메라 사용 중인지 확인")
-            self.running = False
-            return
-        
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        
-        # 첫 프레임 읽기 테스트
-        ret, _ = self.cap.read()
-        if not ret:
-            logger.error(f"❌ 카메라 {camera_index}에서 프레임을 읽을 수 없습니다.")
-            self.cap.release()
-            self.running = False
-            return
-        
-        logger.info(f"✅ 카메라 {camera_index} 정상 작동")
         logger.info("🎥 비접촉 터치 시스템 시작")
         logger.info(f"💡 손바닥을 {self.PALM_HOLD_DURATION}초간 보여주면 활성화됩니다")
         
         
         try:
-            while self.running:
-                ret, frame = self.cap.read()
+            if self.use_realsense:
+                # RealSense 카메라 사용 (이미 초기화됨)
+                logger.info("📹 RealSense D415 RGB 카메라 사용")
+                
+                # 카메라가 아직 시작되지 않았다면 시작
+                if not self.camera.running:
+                    if not self.camera.initialize():
+                        logger.error("❌ RealSense 카메라 초기화 실패")
+                        self.running = False
+                        return
+                    self.camera.start()
+                
+                # 프레임 수신 콜백 등록
+                self.camera.subscribe(self._on_frame_received)
+                logger.info("✅ RealSense 카메라 구독 완료")
+                
+            else:
+                # 일반 웹캠 사용
+                camera_index = self.config.get('camera_index', 0)
+                logger.info(f"📹 웹캠 {camera_index} 열기 시도 중...")
+                
+                self.cap = cv2.VideoCapture(camera_index)
+                
+                if not self.cap.isOpened():
+                    logger.error(f"❌ 카메라 {camera_index}를 열 수 없습니다.")
+                    self.running = False
+                    return
+                
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                
+                ret, _ = self.cap.read()
                 if not ret:
-                    time.sleep(0.01)
-                    continue
+                    logger.error(f"❌ 카메라 {camera_index}에서 프레임을 읽을 수 없습니다.")
+                    self.cap.release()
+                    self.running = False
+                    return
+                
+                logger.info(f"✅ 웹캠 {camera_index} 정상 작동")
+            
+            logger.info(f"💡 손바닥을 {self.PALM_HOLD_DURATION}초간 보여주면 활성화됩니다")
+            
+            while self.running:
+                # 프레임 읽기
+                if self.use_realsense:
+                    if self.current_color is None:
+                        time.sleep(0.01)
+                        continue
+                    frame = self.current_color.copy()
+                else:
+                    ret, frame = self.cap.read()
+                    if not ret:
+                        time.sleep(0.01)
+                        continue
                 
                 # 프레임 처리
                 self.process_frame(frame)
                 
-                # 작은 딜레이
                 time.sleep(0.01)
         
         finally:
-            if self.cap:
+            # 정리
+            if self.use_realsense:
+                self.camera.unsubscribe(self._on_frame_received)
+                logger.info("🛑 RealSense 카메라 구독 해제")
+            elif self.cap:
                 self.cap.release()
+                logger.info("🛑 웹캠 종료")
+            
             cv2.destroyAllWindows()
             logger.info("🛑 비접촉 터치 시스템 종료")
+
+
+
+
     
     # ===== 서비스 제어 =====
     
@@ -392,8 +436,8 @@ class HandGestureService:
             logger.warning("⚠️  이미 실행 중입니다")
             return False
         
-        camera_index = self.config.get('camera_index', 0)
-        logger.info(f"🚀 HandGestureService 시작 중... (카메라: {camera_index})")
+        camera_type = "RealSense D415" if self.use_realsense else f"웹캠 {self.config.get('camera_index', 0)}"
+        logger.info(f"🚀 HandGestureService 시작 중... ({camera_type})")
         
         self.running = True
         self.thread = threading.Thread(target=self.run, daemon=True)
@@ -402,15 +446,24 @@ class HandGestureService:
         # 카메라 초기화 대기 (최대 2초)
         for i in range(20):
             time.sleep(0.1)
-            if not self.running:  # run()에서 실패로 running=False 설정됨
-                logger.error("❌ HandGestureService 시작 실패 - 카메라를 열 수 없습니다")
+            if not self.running:
+                logger.error(f"❌ HandGestureService 시작 실패 - {camera_type}를 열 수 없습니다")
                 return False
-            if self.cap is not None and self.cap.isOpened():
+            
+            # 카메라가 정상적으로 열렸는지 확인
+            camera_ready = False
+            if self.use_realsense:
+                camera_ready = self.pipeline is not None
+            else:
+                camera_ready = self.cap is not None and self.cap.isOpened()
+            
+            if camera_ready:
                 logger.info("✅ HandGestureService 시작 완료")
                 return True
         
         logger.info("✅ HandGestureService 시작됨")
         return True
+
     
     def stop(self):
         """서비스 중지"""

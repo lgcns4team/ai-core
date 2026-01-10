@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # SSL 인증 우회 (맥 개발 환경용)
 ssl._create_default_https_context = ssl._create_unverified_context
 
+from config.settings import GESTURE_CONFIG
 # 서비스 import
 from services.detect import DepthFaceAnalyzer
 from services.voice import VoiceOrderService
@@ -163,39 +164,27 @@ async def startup_event():
     
     # 비접촉 터치 서비스 자동 시작
     print("\n[3/3] 비접촉 터치 서비스 시작 중...")
-    print("   → 웹캠 (카메라 인덱스: 0)")
+    camera_info = "RealSense D415 RGB 카메라" if GESTURE_CONFIG['use_realsense'] else f"웹캠 (인덱스: {GESTURE_CONFIG['camera_index']})"
+    print(f"   → {camera_info}")
+    
     try:
-        # 제스처 설정 (카메라 인덱스 0)
-        gesture_config = {
-            'camera_index': 0,  # 카메라 인덱스 0
-            'palm_hold_duration': 2.0,
-            'no_hand_timeout': 2.0,
-            'smoothing': 2,
-            'pinch_threshold': 40,
-            'swipe_threshold': 100,
-            'scroll_threshold': 25,
-            'scroll_sensitivity': 120,
-        }
-        
-        gesture_service = HandGestureService(gesture_config)
+        gesture_service = HandGestureService(GESTURE_CONFIG)
         success = gesture_service.start()
         
         if success:
-            # gesture_router에도 서비스 인스턴스 전달
             gesture_router.gesture_service = gesture_service
             gesture_router.service = gesture_service
             
             print("✅ 비접촉 터치 서비스 시작 완료")
-            print("   💡 카메라 화면이 자동으로 표시됩니다 (개발 모드)")
+            print(f"   💡 사용 카메라: {camera_info}")
             print("   💡 손바닥을 2초간 보여주면 제스처 제어가 활성화됩니다")
-            print("   💡 ESC 키를 누르면 제스처 서비스가 종료됩니다")
         else:
             print("❌ 비접촉 터치 서비스 시작 실패")
-            print("   → 카메라를 열 수 없습니다. 로그를 확인하세요.")
             gesture_service = None
     except Exception as e:
         print(f"❌ 비접촉 터치 서비스 오류: {e}")
         gesture_service = None
+
     
     print("\n" + "=" * 60)
     print("✅ 모든 서비스 준비 완료!")
@@ -221,17 +210,17 @@ async def shutdown_event():
     print("=" * 60)
     
     # 얼굴 감지 서비스 종료
-    print("\n[1/3] 얼굴 감지 서비스 종료 중...")
+    print("\n[1/4] 얼굴 감지 서비스 종료 중...")
     face_analyzer.stop()
     print("✅ 얼굴 감지 서비스 종료 완료")
     
     # 음성 주문 서비스 종료
-    print("\n[2/3] 음성 주문 서비스 종료 중...")
+    print("\n[2/4] 음성 주문 서비스 종료 중...")
     voice_service.cleanup()
     print("✅ 음성 주문 서비스 종료 완료")
     
     # 비접촉 터치 서비스 종료
-    print("\n[3/3] 비접촉 터치 서비스 종료 중...")
+    print("\n[3/4] 비접촉 터치 서비스 종료 중...")
     try:
         if gesture_service is not None:
             gesture_service.stop()
@@ -240,6 +229,16 @@ async def shutdown_event():
             print("ℹ️  비접촉 터치 서비스가 실행 중이 아닙니다.")
     except Exception as e:
         print(f"⚠️  비접촉 터치 서비스 종료 중 오류: {e}")
+    
+    # RealSense 카메라 서비스 종료
+    print("\n[4/4] RealSense 카메라 서비스 종료 중...")
+    try:
+        from services.camera import RealSenseCameraService
+        camera = RealSenseCameraService()
+        camera.stop()
+        print("✅ RealSense 카메라 서비스 종료 완료")
+    except Exception as e:
+        print(f"⚠️  카메라 서비스 종료 중 오류: {e}")
     
     print("\n" + "=" * 60)
     print("✅ 모든 서비스 종료 완료")
