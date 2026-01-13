@@ -35,6 +35,16 @@ Intel RealSense 기반 얼굴 감지/분석 API와 음성 인식 기반 주문 A
 - **다양한 명령어**: ADD/UPDATE/REMOVE/CLEAR 지원
 - **옵션 처리**: 온도, 사이즈, 추가 옵션 자동 매핑
 
+### 3️⃣ 비접촉 터치 제스처 (Touchless Gesture)
+
+- **손 인식**: MediaPipe Hands 기반의 정밀한 손가락 추적
+- **스마트 활성화**: 손바닥을 3초간 보여주면 시스템 활성화 (자동 비활성화 지원)
+- **시스템 커서 제어**:
+  - **이동**: 검지 손가락 끝 위치에 따라 마우스 커서 실시간 매핑
+  - **클릭**: 엄지와 검지를 붙이는 핀치(Pinch) 제스처
+  - **스크롤/탐색**: 주먹을 쥐고 상하(스크롤) 또는 좌우(페이지 앞/뒤) 이동
+- **커스텀 UI**: 활성화 상태 및 제스처 모드에 따라 마우스 커서 모양 자동 변경
+
 ---
 
 ## 📁 프로젝트 구조
@@ -42,36 +52,35 @@ Intel RealSense 기반 얼굴 감지/분석 API와 음성 인식 기반 주문 A
 ```
 AI-CORE/
 ├── config/
-│   └── settings.py              ✅ 업데이트됨
+│   └── settings.py
 │
 ├── models/
-│   └── voice.py                 ✓ 기존 유지
+│   └── voice.py
 │
 ├── routers/
-│   ├── detect.py                ✓ 기존 유지
-│   ├── voice.py                 ✓ 기존 유지
-│   └── gesture.py               🆕 새로 추가
+│   ├── detect.py
+│   ├── voice.py
+│   └── gesture.py
 │
 ├── services/
-│   ├── detect.py                ✓ 기존 유지
-│   ├── voice.py                 ✓ 기존 유지
-│   └── gesture.py               🆕 새로 추가
+│   ├── camera.py
+│   ├── detect.py
+│   ├── voice.py
+│   └── gesture.py
 │
 ├── schemas/
-│   ├── detect.py                ✓ 기존 유지
-│   ├── voice.py                 ✓ 기존 유지
-│   └── gesture.py               🆕 선택 추가 (schemas_gesture.py)
+│   ├── detect.py
+│   └── voice.py
 │
 ├── utils/
-│   ├── audio.py                 ✓ 기존 유지
-│   └── parser.py                ✓ 기존 유지
+│   ├── audio.py
+│   └── parser.py
 │
-├── .env                         ✅ 업데이트됨
-├── .env.example                 🆕 새로 추가
-├── main.py                      ✅ 업데이트됨
-├── my_req.txt                   ✅ 업데이트됨
-├── README.md                    🆕 새로 추가
-└── INTEGRATION_GUIDE.md         📚 참고 문서
+├── .env
+├── main.py
+├── my_req.txt
+├── README.md
+└── INTEGRATION_GUIDE.md
 ```
 
 ---
@@ -127,19 +136,13 @@ GESTURE_CAMERA_INDEX=1
 
 ## 🚀 실행 방법
 
-### 방법 1: run.py 사용 (권장)
-
-```bash
-python run.py
-```
-
-### 방법 2: main.py 직접 실행
+### 방법 1: main.py 직접 실행
 
 ```bash
 python main.py
 ```
 
-### 방법 3: uvicorn 명령어
+### 방법 2: uvicorn 명령어
 
 ```bash
 uvicorn main:app --host 0.0.0.0 --port 8000
@@ -200,6 +203,14 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 |--------|------|------|
 | POST | `/order/voice` | 음성 파일 업로드 및 주문 처리 |
 | GET | `/order/test` | API 테스트 |
+
+### 🖐️ 제스처 인식 (Gesture Control)
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| POST | `/gesture/start` | 비접촉 터치 시스템 시작 (커서 제어 활성화) |
+| POST | `/gesture/stop` | 비접촉 시스템 중지 |
+| GET | `/gesture/status` | 현재 실행 여부 및 제스처 상태(주먹 모드 등) 조회 |
+| GET | `/gesture/info` | 지원되는 제스처 목록 및 사용 가이드 반환 |
 
 ---
 
@@ -312,6 +323,41 @@ for action in result['actions']:
         print(f"가격: {data['price']}원")
 ```
 
+### 3️⃣ 비접촉 터치 제스처 사용
+
+#### 시스템 시작 (커서 제어 활성화)
+
+```Bash
+curl -X POST http://localhost:8000/gesture/start \
+     -H "Content-Type: application/json" \
+     -d '{"camera_index": 1, "smoothing": 2}'
+```
+
+**상태 확인**
+
+```Bash
+curl http://localhost:8000/gesture/status
+```
+
+**응답 예시:**
+
+```JSON
+{
+  "running": true,
+  "active": true,
+  "fist_mode": false,
+  "pinch_down": false,
+  "cursor_hidden": false
+}
+```
+
+#### 제스처 가이드
+1. 활성화: 손바닥 전체를 카메라에 3초간 고정 (커서 모양이 변경됨)
+2. 마우스 이동: 검지 손가락으로 화면 가리키기
+3. 클릭: 엄지와 검지 끝을 맞대기 (Pinch)
+4. 브라우저 제어: 주먹을 쥐고 좌우로 흔들기 (뒤로가기/앞으로가기)
+5. 종료: 손을 화면 밖으로 2초간 치우기 (자동 비활성화)
+
 ---
 
 ## ⚙️ 설정
@@ -334,6 +380,18 @@ WHISPER_MODEL_SIZE = "small"  # tiny, base, small, medium, large
 
 # 노이즈 감소 비율
 NOISE_REDUCTION_PROP = 0.75  # 0.0~1.0
+```
+
+### 제스처 설정 (.env 또는 routers/gesture.py)
+
+```python
+# 활성화 감도 설정
+PALM_HOLD_DURATION = 3.0  # 손바닥 유지 시간(초)
+NO_HAND_TIMEOUT = 2.0     # 비활성화 타임아웃(초)
+
+# 마우스 동작 설정
+SMOOTHING = 2             # 커서 부드러움 지수 (1~5)
+PINCH_THRESHOLD = 40      # 클릭 인식 거리
 ```
 
 ---
