@@ -199,7 +199,6 @@ clean_*
 
 # Model files (Whisper 모델 캐시)
 .cache/
-models/
 
 # Database
 *.db
