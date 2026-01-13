@@ -1,6 +1,6 @@
-# 🚀 Integrated API - Face Detection & Voice Order
+# 🚀 AI core - Face Detection & Voice Order & Touchless Gesture
 
-Intel RealSense 기반 얼굴 감지/분석 API와 음성 인식 기반 주문 API를 하나의 서버에서 제공하는 통합 서비스입니다.
+Intel RealSense 기반 얼굴 감지/분석 API와 음성 인식 기반 주문 API를 하나의 서버에서 제공하며, Mediapipe 기반 비접촉 터치 제어를 활용 통합 서비스입니다.
 
 ## 📋 목차
 
