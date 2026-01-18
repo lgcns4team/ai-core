@@ -33,6 +33,7 @@ mtcnn==1.0.0
 # TensorFlow: Windows/Linux용 (공식)
 tensorflow==2.20.0; platform_system == "Windows" or platform_system == "Linux"
 tensorflow-intel==2.16.2; platform_system == "Windows"
+tf-keras==2.16.0
 
 # TensorFlow: macOS용 (Apple Silicon 지원)
 tensorflow==2.16.2; platform_system == "Darwin"
@@ -58,6 +59,10 @@ numpy==1.26.4
 pandas==2.3.3
 scikit-learn==1.8.0
 matplotlib==3.10.8
+
+# ===== Date/Time Utilities =====
+pytz==2025.2
+python-dateutil==2.9.0.post0
 
 # ===== Additional ML =====
 torch==2.9.1
